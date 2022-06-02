@@ -158,7 +158,6 @@ int __stdcall WinMain(HINSTANCE, HINSTANCE, PSTR, int)
     return util::ShutdownDispatcherQueueControllerAndWait(controller, static_cast<int>(msg.wParam));
 }
 
-
 template<typename T>
 winrt::com_ptr<ID3D11Buffer> CreateBuffer(winrt::com_ptr<ID3D11Device> d3dDevice, std::vector<T> const& data, uint32_t bindFlags)
 {
