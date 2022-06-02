@@ -56,7 +56,11 @@ int __stdcall WinMain(HINSTANCE, HINSTANCE, PSTR, int)
     target.Root(root);
 
     // Init D3D11
-    auto d3dDevice = util::CreateD3DDevice();
+    uint32_t deviceFlags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
+#ifdef _DEBUG
+    deviceFlags |= D3D11_CREATE_DEVICE_DEBUG;
+#endif
+    auto d3dDevice = util::CreateD3DDevice(deviceFlags);
     winrt::com_ptr<ID3D11DeviceContext> d3dContext;
     d3dDevice->GetImmediateContext(d3dContext.put());
 
@@ -125,6 +129,17 @@ int __stdcall WinMain(HINSTANCE, HINSTANCE, PSTR, int)
     d3dContext->IASetInputLayout(inputLayout.get());
     d3dContext->VSSetShader(vertexShader.get(), nullptr, 0);
     d3dContext->PSSetShader(pixelShader.get(), nullptr, 0);
+    std::vector<ID3D11RenderTargetView*> rtvs = { rtv.get() };
+    d3dContext->OMSetRenderTargets(rtvs.size(), rtvs.data(), nullptr);
+
+    D3D11_VIEWPORT viewport = {};
+    viewport.TopLeftX = 0.0f;
+    viewport.TopLeftY = 0.0f;
+    viewport.Width = 800.0f;
+    viewport.Height = 600.0f;
+    viewport.MinDepth = 0.0f;
+    viewport.MaxDepth = 1.0f;
+    d3dContext->RSSetViewports(1, &viewport);  
 
     // Draw our content
     d3dContext->ClearRenderTargetView(rtv.get(), CLEARCOLOR);
@@ -150,7 +165,7 @@ winrt::com_ptr<ID3D11Buffer> CreateBuffer(winrt::com_ptr<ID3D11Device> d3dDevice
     D3D11_SUBRESOURCE_DATA bufferData = {};
     bufferData.pSysMem = reinterpret_cast<const void*>(data.data());
     D3D11_BUFFER_DESC desc = {};
-    desc.ByteWidth = sizeof(T);
+    desc.ByteWidth = sizeof(T) * data.size();
     desc.Usage = D3D11_USAGE_DEFAULT;
     desc.BindFlags = bindFlags;
     winrt::com_ptr<ID3D11Buffer> buffer;
