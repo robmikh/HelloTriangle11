@@ -13,4 +13,8 @@
     <ClInclude Include="pch.h" />
     <ClInclude Include="MainWindow.h" />
   </ItemGroup>
+  <ItemGroup>
+    <FxCompile Include="VertexShader.hlsl" />
+    <FxCompile Include="PixelShader.hlsl" />
+  </ItemGroup>
 </Project>

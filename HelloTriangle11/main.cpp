@@ -1,6 +1,18 @@
 ﻿#include "pch.h"
 #include "MainWindow.h"
 
+namespace shaders
+{
+    namespace pixel
+    {
+        #include "PixelShader.h"
+    }
+    namespace vertex
+    {
+        #include "VertexShader.h"
+    }
+}
+
 namespace winrt
 {
     using namespace Windows::Foundation;
@@ -16,6 +28,15 @@ namespace util
 }
 
 float CLEARCOLOR[] = { 0.39f, 0.58f, 0.93f, 1.0f }; // RGBA
+
+struct Vertex
+{
+    winrt::float3 pos;
+    winrt::float3 color;
+};
+
+template<typename T>
+winrt::com_ptr<ID3D11Buffer> CreateBuffer(winrt::com_ptr<ID3D11Device> d3dDevice, std::vector<T> const& data, uint32_t bindFlags);
 
 int __stdcall WinMain(HINSTANCE, HINSTANCE, PSTR, int)
 {
@@ -52,9 +73,62 @@ int __stdcall WinMain(HINSTANCE, HINSTANCE, PSTR, int)
     winrt::check_hresult(swapChain->GetBuffer(0, winrt::guid_of<ID3D11Texture2D>(), backBuffer.put_void()));
     winrt::com_ptr<ID3D11RenderTargetView> rtv;
     winrt::check_hresult(d3dDevice->CreateRenderTargetView(backBuffer.get(), nullptr, rtv.put()));
+    
+    // Load our shaders and input layout
+    winrt::com_ptr<ID3D11VertexShader> vertexShader;
+    winrt::check_hresult(d3dDevice->CreateVertexShader(
+        shaders::vertex::g_main, 
+        ARRAYSIZE(shaders::vertex::g_main), 
+        nullptr, 
+        vertexShader.put()));
+    winrt::com_ptr<ID3D11PixelShader> pixelShader;
+    winrt::check_hresult(d3dDevice->CreatePixelShader(
+        shaders::pixel::g_main,
+        ARRAYSIZE(shaders::pixel::g_main),
+        nullptr,
+        pixelShader.put()));
 
-    // Clear the back buffer
+    std::vector<D3D11_INPUT_ELEMENT_DESC> vertexDesc = 
+    {
+        { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+        { "COLOR", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+    };
+    winrt::com_ptr<ID3D11InputLayout> inputLayout;
+    winrt::check_hresult(d3dDevice->CreateInputLayout(
+        vertexDesc.data(),
+        vertexDesc.size(),
+        shaders::vertex::g_main,
+        ARRAYSIZE(shaders::vertex::g_main),
+        inputLayout.put()));
+
+    // Create our vertex and index buffers
+    std::vector<Vertex> vertices =
+    {
+        { { 0.0f,  0.5f, 0.0f }, { 1.0f, 0.0f, 0.0f } },
+        { { 0.5f, -0.5f, 0.0f }, { 0.0f, 1.0f, 0.0f } },
+        { {-0.5f, -0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f } },
+    };
+    std::vector<uint16_t> indices =
+    {
+        0, 1, 2,
+    };
+    auto vertexBuffer = CreateBuffer<Vertex>(d3dDevice, vertices, D3D11_BIND_VERTEX_BUFFER);
+    auto indexBuffer = CreateBuffer<uint16_t>(d3dDevice, indices, D3D11_BIND_INDEX_BUFFER);
+
+    // Setup our pipeline
+    std::vector<ID3D11Buffer*> vertexBuffers = { vertexBuffer.get() };
+    uint32_t vertexStride = sizeof(Vertex);
+    uint32_t offset = 0;
+    d3dContext->IASetVertexBuffers(0, vertexBuffers.size(), vertexBuffers.data(), &vertexStride, &offset);
+    d3dContext->IASetIndexBuffer(indexBuffer.get(), DXGI_FORMAT_R16_UINT, 0);
+    d3dContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    d3dContext->IASetInputLayout(inputLayout.get());
+    d3dContext->VSSetShader(vertexShader.get(), nullptr, 0);
+    d3dContext->PSSetShader(pixelShader.get(), nullptr, 0);
+
+    // Draw our content
     d3dContext->ClearRenderTargetView(rtv.get(), CLEARCOLOR);
+    d3dContext->DrawIndexed(indices.size(), 0, 0);
 
     // Present!
     winrt::check_hresult(swapChain->Present(0, 0));
@@ -67,4 +141,19 @@ int __stdcall WinMain(HINSTANCE, HINSTANCE, PSTR, int)
         DispatchMessageW(&msg);
     }
     return util::ShutdownDispatcherQueueControllerAndWait(controller, static_cast<int>(msg.wParam));
+}
+
+
+template<typename T>
+winrt::com_ptr<ID3D11Buffer> CreateBuffer(winrt::com_ptr<ID3D11Device> d3dDevice, std::vector<T> const& data, uint32_t bindFlags)
+{
+    D3D11_SUBRESOURCE_DATA bufferData = {};
+    bufferData.pSysMem = reinterpret_cast<const void*>(data.data());
+    D3D11_BUFFER_DESC desc = {};
+    desc.ByteWidth = sizeof(T);
+    desc.Usage = D3D11_USAGE_DEFAULT;
+    desc.BindFlags = bindFlags;
+    winrt::com_ptr<ID3D11Buffer> buffer;
+    winrt::check_hresult(d3dDevice->CreateBuffer(&desc, &bufferData, buffer.put()));
+    return buffer;
 }
